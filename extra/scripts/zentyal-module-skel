@@ -1,27 +1,57 @@
 #!/bin/bash
 
-if [ $# -lt 2 ]
-then
-    echo -e "Usage: $0 <modulename> <directory>\n"
-    echo "Example:"
-    echo -e "\t$0 MyModule mymodule\n"
-    echo "WARNING: directory name must be equal to module name in lowercase"
+# Function to show usage instructions
+show_usage() {
+    echo -e "Usage:\033[32m\t$0 <modulename> <your name> <email>\033[0m\n"
+    echo -e "Example:\033[32m MyModule \"Packaging Developer\" pkg-team@yourcompany.com\033[0m\n"
+    echo -e "\033[33mNote: Module should not contain '-' or spaces\033[0m"
     exit 1
+}
+
+# Check for the minimum number of arguments
+if [ $# -lt 3 ]; then
+    show_usage
 fi
 
+# Assign input parameters to variables
 MODULENAME=$1
-DESTDIR=$2
-DIST=saucy
-VERSION=3.4
+DEBFULLNAME=$2
+DEBEMAIL=$3
 
-PKGNAME=$(basename $DESTDIR)
+# Convert module name to lowercase
+LOWER_MODULENAME=$(echo "$MODULENAME" | tr '[:upper:]' '[:lower:]')
 
-mkdir -p $DESTDIR/schemas
-mkdir -p $DESTDIR/src/EBox/$MODULENAME/Model
-mkdir -p $DESTDIR/stubs
-mkdir -p $DESTDIR/src/scripts
-mkdir -p $DESTDIR/debian
+# Check if the module name contains invalid characters
+if [[ "$MODULENAME" =~ [^a-zA-Z0-9_] ]]; then
+    echo -e "\n\033[31mError: Module name contains invalid characters. Only alphanumeric characters and underscores are allowed.\n\033[0m"
+    show_usage
+fi
 
+# Check if the email address is valid
+if ! [[ "$DEBEMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+    echo -e "\n\033[31mError: Invalid email address.\n\033[0m"
+    show_usage
+fi
+
+# Set the destination directory name
+DESTDIR=$LOWER_MODULENAME
+
+# Get distribution codename and Zentyal version
+DIST=$(lsb_release -c -s)
+VERSION=$(perl -e 'use EBox::Config;print EBox::Config::version()')
+
+# Ensure DESTDIR is the lowercase version of MODULENAME
+PKGNAME=$(basename "$DESTDIR")
+
+# Create necessary directories
+mkdir -p "$DESTDIR/schemas"
+mkdir -p "$DESTDIR/src/EBox/$MODULENAME/Model"
+mkdir -p "$DESTDIR/stubs"
+mkdir -p "$DESTDIR/src/scripts"
+mkdir -p "$DESTDIR/debian"
+mkdir -p "$DESTDIR/debian/source"
+
+# Create schemas YAML file
 cat >$DESTDIR/schemas/$PKGNAME.yaml <<EOF
 class: EBox::$MODULENAME
 
@@ -29,7 +59,7 @@ models:
     - Settings
 EOF
 
-
+# Create main Perl module
 cat >$DESTDIR/src/EBox/$MODULENAME.pm <<EOF
 package EBox::$MODULENAME;
 
@@ -194,6 +224,7 @@ sub _table
 1;
 EOF
 
+# Create script to enable the module
 cat >$DESTDIR/src/scripts/enable-module <<EOF
 #!/bin/bash
 
@@ -204,6 +235,7 @@ set -e
 exit 0
 EOF
 
+# Create script for initial setup
 cat >$DESTDIR/src/scripts/initial-setup <<EOF
 #!/bin/bash
 
@@ -214,7 +246,7 @@ set -e
 exit 0
 EOF
 
-
+# Create service configuration template
 cat >$DESTDIR/stubs/service.conf.mas <<EOF
 <%args>
     \$boolean
@@ -225,7 +257,7 @@ boolean = <% \$boolean %>
 text = "<% \$text %>"
 EOF
 
-
+# Create post-removal script for Debian package
 cat >$DESTDIR/debian/zentyal-$PKGNAME.postrm <<EOF
 #!/bin/bash
 
@@ -245,6 +277,7 @@ esac
 exit 0
 EOF
 
+# Create post-installation script for Debian package
 cat >$DESTDIR/debian/zentyal-$PKGNAME.postinst <<EOF
 #!/bin/bash
 
@@ -255,7 +288,6 @@ set -e
 case "\$1" in
     configure)
         /usr/share/zentyal/initial-setup $PKGNAME \$2
-
         dpkg-trigger --no-await zentyal-core
     ;;
 esac
@@ -263,29 +295,44 @@ esac
 exit 0
 EOF
 
-
+# Create Debian rules file
 cat >$DESTDIR/debian/rules <<EOF
 #!/usr/bin/make -f
 
 include /usr/share/zbuildtools/1/rules/zentyal.mk
 EOF
 
+
+
+# Create changelog for module
+cat >$DESTDIR/ChangeLog <<EOF
+$VERSION
+
+	+ Initial release
+
+EOF
+
+
+# Create changelog for Debian package
 cat >$DESTDIR/debian/changelog <<EOF
 zentyal-$PKGNAME ($VERSION~1) $DIST; urgency=low
 
   * New upstream release
 
- -- YOURNAME <youremail@yourdomain>  Fri, 25 Jan 2013 02:53:07 +0100
-
+ -- $DEBFULLNAME <$DEBEMAIL>  $(date +"%a, %d %b %Y %T %z")
+ 
 EOF
 
+
+# Create control file for Debian package
 cat >$DESTDIR/debian/control <<EOF
 Source: zentyal-$PKGNAME
+Maintainer: $DEBFULLNAME <$DEBEMAIL>
 Section: web
 Priority: optional
-Maintainer: Zentyal Packaging Maintainers <pkg-team@zentyal.com>
 Build-Depends: debhelper (>= 7.0.0), cdbs
-Standards-Version: 3.9.1
+Standards-Version: $VERSION
+XSBC-Original-Maintainer: $VERSION
 Homepage: http://www.zentyal.org/
 
 Package: zentyal-$PKGNAME
@@ -300,9 +347,16 @@ Description: Zentyal - $MODULENAME module
  FIXME: description goes here.
 EOF
 
-cat >$DESTDIR/ChangeLog <<EOF
-$VERSION
-	+ Initial release
-EOF
+# Set compatibility level and source format
+echo 10 > "$DESTDIR/debian/compat"
+echo '1.0' > "$DESTDIR/debian/source/format"
 
-echo 7 > $DESTDIR/debian/compat
+# Make scripts executable
+chmod +x "$DESTDIR/debian/rules"
+chmod +x "$DESTDIR/debian/zentyal-$PKGNAME.postinst"
+chmod +x "$DESTDIR/debian/zentyal-$PKGNAME.postrm"
+
+# Print final instructions
+echo "To build the package, change the directory using: cd $DESTDIR"
+echo "Use \"dch -i\" to update your package version and changelog"
+echo "Execute package builder using: zentyal-package"
