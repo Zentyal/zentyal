@@ -1810,7 +1810,7 @@ sub dumpConfig
     if (EBox::Sudo::fileTest('-d', $bindDir)) {
         # Storing all BIND DNS directory tree where DLZ and dns keytab are stored
         push (@cmds, "rm -rf $mirror");
-        push (@cmds, "mkdir -p $mirror/bid-dns");
+        push (@cmds, "mkdir -p $mirror/bind-dns");
         push (@cmds, "rsync -HAXavz $bindDir/ $mirror/bind-dns");
         push (@cmds, "tar pcjf $dir/bind-dns.tar.bz2 --hard-dereference -C $mirror bind-dns");
     }    
@@ -1933,7 +1933,7 @@ sub restoreConfig
         $self->stopService();
     }
 
-    # Remove bid-dns, private and sysvol
+    # Remove bind-dns, private and sysvol
     my $privateDir = PRIVATE_DIR;
     my $bindDir = SAMBA_DNS_DIR;
     my $sysvolDir = SYSVOL_DIR;
