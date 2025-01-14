@@ -92,7 +92,6 @@ local_recipient_maps = proxy:unix:passwd.byname $alias_maps
 relayhost = <% $relay %>
 
 % if ($relay) {
-smtp_tls_security_level = may
 smtp_tls_key_file  = <% $keyFile  %>
 smtp_tls_cert_file = <% $certFile %>
 % }
@@ -133,6 +132,7 @@ virtual_uid_maps = static:<% $uidvmail %>
 virtual_gid_maps = static:<% $gidvmail %>
 
 # TLS/SSL
+smtp_tls_security_level = may
 smtpd_use_tls = yes
 smtpd_tls_key_file  = <% $keyFile  %>
 smtpd_tls_cert_file = <% $certFile %>
